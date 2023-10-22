@@ -12,6 +12,12 @@ Requirements
 - [ https://crates.io/crates/wgpu ]( https://crates.io/crates/wgpu )
 
 
+Samples
+-------
+
+- [ https://crates.io/crates/wgpu-app-sample ]( https://crates.io/crates/wgpu-app-sample )
+
+
 License
 -------
 
