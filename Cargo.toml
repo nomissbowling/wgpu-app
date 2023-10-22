@@ -1,0 +1,34 @@
+[package]
+name = "wgpu-app"
+version = "0.17.0" # change with html_root_url in lib.rs
+edition = "2021"
+authors = ["nomissbowling <nomissbowling@yahoo.co.jp>"]
+
+description = "Rust wgpu partial fork for management Vertex Texture CameraAngle"
+keywords = ["wgpu", "vertex", "texture", "3D", "gl"]
+categories = ["graphics", "rendering", "rendering::graphics-api", "multimedia", "multimedia::images"]
+license = "MIT"
+
+documentation = "https://docs.rs/wgpu-app/"
+homepage = "https://crates.io/crates/wgpu-app"
+repository = "https://github.com/nomissbowling/wgpu-app"
+
+readme = "README.md"
+
+#build = "build.rs"
+
+[lib]
+name = "wgpu_app"
+
+[dependencies]
+wgpu = { version = "0.17" } # "0.17.0"
+winit = { version = "0.28" } # "0.28.7"
+bytemuck = { version = "1.14", features = ["derive"] } # "1.14.0"
+glam = { version = "0.24" } # "0.24.2"
+env_logger = { version = "0.10" } # "0.10.0"
+log = { version = "0.4" } # "0.4.20"
+pollster = { version = "0.3" } # "0.3.0"
+
+async-executor = { version = "1.5" } # "1.5.4"
+
+image = { version = "0.24" } # "0.24.7"
