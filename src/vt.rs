@@ -301,16 +301,35 @@ impl CameraAngle {
   }
 }
 
+/// TextureBindGroup (wgpu::BindGroup with texture size)
+#[derive(Debug)]
+pub struct TextureBindGroup {
+  /// wgpu::BindGroup
+  pub group: wgpu::BindGroup,
+  /// sz (always hold copy) must have len 2
+  pub sz: Vec<u32>,
+  /// wgpu::Buffer for sz
+  pub buf: wgpu::Buffer
+}
+
 /// World of GL
 #[derive(Debug)]
 pub struct WG {
+  /// VIPs
   pub vips: Vec<VIP>,
-  pub bind_group: Vec<wgpu::BindGroup>,
+  /// vector of TextureBindGroup
+  pub bind_group: Vec<TextureBindGroup>,
+  /// current bind group
   pub bg: usize,
+  /// mvp (always hold copy)
   pub mvp: glam::Mat4,
+  /// wgpu::Buffer for mvp
   pub uniform_buf: wgpu::Buffer,
+  /// pipeline
   pub pipeline: wgpu::RenderPipeline,
+  /// pipeline_wire
   pub pipeline_wire: Option<wgpu::RenderPipeline>,
+  /// draw wire without(true) or with(false) texture
   pub wire: bool
 }
 
@@ -367,7 +386,7 @@ impl WG {
         let tid = (fi.tf)((i as usize, self.bg, self.bind_group.len()));
         rpass.push_debug_group("Prepare data for draw.");
         rpass.set_pipeline(&self.pipeline);
-        rpass.set_bind_group(0, &self.bind_group[tid], &[]);
+        rpass.set_bind_group(0, &self.bind_group[tid].group, &[]);
         rpass.set_index_buffer(index_buf.slice(ip_s..ip_e),
           wgpu::IndexFormat::Uint16);
         rpass.set_vertex_buffer(0, vertex_buf.slice(vp_s..vp_e)); // == (..)

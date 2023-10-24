@@ -31,7 +31,8 @@ pub trait App: 'static + Sized {
     wgpu::Features::empty()
   }
   fn required_features() -> wgpu::Features {
-    wgpu::Features::empty()
+//    wgpu::Features::empty()
+    wgpu::Features::DEPTH_CLIP_CONTROL
   }
   fn required_downlevel_capabilities() -> wgpu::DownlevelCapabilities {
     wgpu::DownlevelCapabilities{

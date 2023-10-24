@@ -1,6 +1,6 @@
 [package]
 name = "wgpu-app"
-version = "0.17.1" # change with html_root_url in lib.rs
+version = "0.17.2" # change with html_root_url in lib.rs
 edition = "2021"
 authors = ["nomissbowling <nomissbowling@yahoo.co.jp>"]
 

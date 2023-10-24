@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/wgpu-app/0.17.1")]
+#![doc(html_root_url = "https://docs.rs/wgpu-app/0.17.2")]
 //! Rust wgpu partial fork for management Vertex Texture CameraAngle
 //!
 
