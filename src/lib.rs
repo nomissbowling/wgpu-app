@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/wgpu-app/0.17.2")]
+#![doc(html_root_url = "https://docs.rs/wgpu-app/0.17.3")]
 //! Rust wgpu partial fork for management Vertex Texture CameraAngle
 //!
 
@@ -11,8 +11,16 @@ mod tests {
 
   #[test]
   fn test_vt() {
-    assert_eq!(vt::vtx([1, 1, 1], [1, 1]),
-      vt::Vertex{pos: [1.0f32; 4], tex_coord: [1.0f32; 2]});
+    assert_eq!(vt::vtx([1, 1, 1], [1, 1]), vt::Vertex{
+      pos: [1.0f32; 4],
+      norm: [1.0f32; 4],
+      col: [191u32, 191u32, 191u32, 255u32],
+      tex_coord: [1.0f32; 2]});
+    assert_eq!(vt::vtf([1, 1, 1], [1.0, 1.0]), vt::Vertex{
+      pos: [1.0f32; 4],
+      norm: [1.0f32; 4],
+      col: [191u32, 191u32, 191u32, 255u32],
+      tex_coord: [1.0f32; 2]});
   }
 
   #[test]

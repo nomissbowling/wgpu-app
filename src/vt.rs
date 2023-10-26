@@ -10,12 +10,16 @@ use bytemuck;
 use glam;
 use wgpu;
 
-/// Vertex
+/// Vertex must be 4 * (4 4 4 2)
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
   /// pos (x, y, z, 1.0)
   pub pos: [f32; 4],
+  /// norm (x, y, z, 1.0)
+  pub norm: [f32; 4],
+  /// col (r, g, b, x)
+  pub col: [u32; 4],
   /// tex (u, v)
   pub tex_coord: [f32; 2]
 }
@@ -24,6 +28,9 @@ pub struct Vertex {
 pub fn vtx(pos: [i8; 3], tc: [i8; 2]) -> Vertex {
   Vertex{
     pos: [pos[0] as f32, pos[1] as f32, pos[2] as f32, 1.0],
+    norm: [pos[0] as f32, pos[1] as f32, pos[2] as f32, 1.0],
+    col: (0..4).map(|i| if i < 3 { (pos[i] + 2) as u32 * 255 / 4 } else { 255 }
+      ).collect::<Vec<_>>().try_into().unwrap(),
     tex_coord: [tc[0] as f32, tc[1] as f32]
   }
 }
@@ -32,6 +39,9 @@ pub fn vtx(pos: [i8; 3], tc: [i8; 2]) -> Vertex {
 pub fn vtf(pos: [i8; 3], tc: [f32; 2]) -> Vertex {
   Vertex{
     pos: [pos[0] as f32, pos[1] as f32, pos[2] as f32, 1.0],
+    norm: [pos[0] as f32, pos[1] as f32, pos[2] as f32, 1.0],
+    col: (0..4).map(|i| if i < 3 { (pos[i] + 2) as u32 * 255 / 4 } else { 255 }
+      ).collect::<Vec<_>>().try_into().unwrap(),
     tex_coord: tc
   }
 }
@@ -62,11 +72,15 @@ pub struct VIP {
 pub fn locscale(o: &[f32; 3], scale: f32, vi: (Vec<Vertex>, Vec<u16>, FaceInf))
   -> (Vec<Vertex>, Vec<u16>, FaceInf) {
   (
-    vi.0.into_iter().map(|Vertex{pos: p, tex_coord: tc}| {Vertex{
-      pos: p.iter().enumerate().map(|(i, &v)| {
-        if i < 3 { o[i] + v * scale } else { v } // expect 'else v' always 1.0
-      }).collect::<Vec<_>>().try_into().unwrap(),
-      tex_coord: tc}
+    vi.0.into_iter().map(|Vertex{pos: p, col: c, norm: n, tex_coord: tc}| {
+      Vertex{
+        pos: p.iter().enumerate().map(|(i, &v)| {
+          if i < 3 { o[i] + v * scale } else { v } // expect else v always 1.0
+        }).collect::<Vec<_>>().try_into().unwrap(),
+        col: c,
+        norm: n,
+        tex_coord: tc
+      }
     }).collect(),
     vi.1,
     vi.2
@@ -103,6 +117,13 @@ pub fn create_vertices_cube_6_textures(
     vtx([-1, -1, 1], [1, 1]),
     vtx([1, -1, 1], [1, 0]),
     vtx([1, 1, 1], [0, 0]),
+
+// extra for test
+#[cfg(interrupt_vertex)] vtx([0, 2, 0], [0, 1]),
+#[cfg(interrupt_vertex)] vtx([2, 2, 0], [1, 1]),
+#[cfg(interrupt_vertex)] vtx([2, 0, 0], [1, 0]),
+#[cfg(interrupt_vertex)] vtx([0, 0, 0], [0, 0]),
+
     // -Z (0, 0, -1) bottom
     vtx([-1, 1, -1], [0, 1]),
     vtx([1, 1, -1], [1, 1]),
@@ -116,10 +137,19 @@ pub fn create_vertices_cube_6_textures(
     8, 9, 10, 10, 11, 8, // +Y back
     12, 13, 14, 14, 15, 12, // -Y front
     16, 17, 18, 18, 19, 16, // +Z top
+
+// extra for test
+#[cfg(interrupt_vertex)] 24,
+#[cfg(interrupt_vertex)] 25,
+#[cfg(interrupt_vertex)] 26,
+#[cfg(interrupt_vertex)] 26,
+#[cfg(interrupt_vertex)] 27,
+#[cfg(interrupt_vertex)] 24,
+
     20, 21, 22, 22, 23, 20 // -Z bottom
   ];
 
-  let nfaces = 6;
+  let nfaces = index_data.len() as u64 / 6;
   (vertex_data.to_vec(), index_data.to_vec(), FaceInf{
     nfaces,
     il: (0..=nfaces).map(|i| i * 6).collect(),
@@ -172,7 +202,7 @@ pub fn create_vertices_cube_expansion_plan(
     20, 21, 22, 22, 23, 20 // -Z bottom
   ];
 
-  let nfaces = 6;
+  let nfaces = index_data.len() as u64 / 6;
   (vertex_data.to_vec(), index_data.to_vec(), FaceInf{
     nfaces,
     il: (0..=nfaces).map(|i| i * 6).collect(),
@@ -301,13 +331,35 @@ impl CameraAngle {
   }
 }
 
+/// TexSZ must impl AsRef&lt;[u32; 4]&gt;
+#[repr(C)]
+#[derive(Debug)]
+pub struct TexSZ {
+  /// w
+  pub w: u32,
+  /// h
+  pub h: u32,
+  /// ext x=mode: 0 square, 1 landscape, 2 portrait, 3 y=max: square
+  pub ext: [u32; 2]
+}
+
+/// TexSZ
+impl AsRef<[u32; 4]> for TexSZ {
+  /// as_ref &amp;[u32; 4]
+  fn as_ref(&self) -> &[u32; 4] {
+unsafe {
+    std::slice::from_raw_parts(&self.w as *const u32, 4).try_into().unwrap()
+}
+  }
+}
+
 /// TextureBindGroup (wgpu::BindGroup with texture size)
 #[derive(Debug)]
 pub struct TextureBindGroup {
   /// wgpu::BindGroup
   pub group: wgpu::BindGroup,
-  /// sz (always hold copy) must have len 2
-  pub sz: Vec<u32>,
+  /// sz (always hold copy)
+  pub sz: TexSZ,
   /// wgpu::Buffer for sz
   pub buf: wgpu::Buffer
 }
