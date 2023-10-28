@@ -10,7 +10,7 @@ use bytemuck;
 use glam;
 use wgpu;
 
-/// Vertex must be 4 * (4 4 4 2)
+/// Vertex must be 4 * (4 4 4 2 1)
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
@@ -21,7 +21,9 @@ pub struct Vertex {
   /// col (r, g, b, x)
   pub col: [u32; 4],
   /// tex (u, v)
-  pub tex_coord: [f32; 2]
+  pub tex_coord: [f32; 2],
+  /// ix
+  pub ix: u32
 }
 
 /// construct Vertex from i8 i8
@@ -31,7 +33,8 @@ pub fn vtx(pos: [i8; 3], tc: [i8; 2]) -> Vertex {
     norm: [pos[0] as f32, pos[1] as f32, pos[2] as f32, 1.0],
     col: (0..4).map(|i| if i < 3 { (pos[i] + 2) as u32 * 255 / 4 } else { 255 }
       ).collect::<Vec<_>>().try_into().unwrap(),
-    tex_coord: [tc[0] as f32, tc[1] as f32]
+    tex_coord: [tc[0] as f32, tc[1] as f32],
+    ix: 0
   }
 }
 
@@ -42,7 +45,8 @@ pub fn vtf(pos: [i8; 3], tc: [f32; 2]) -> Vertex {
     norm: [pos[0] as f32, pos[1] as f32, pos[2] as f32, 1.0],
     col: (0..4).map(|i| if i < 3 { (pos[i] + 2) as u32 * 255 / 4 } else { 255 }
       ).collect::<Vec<_>>().try_into().unwrap(),
-    tex_coord: tc
+    tex_coord: tc,
+    ix: 0
   }
 }
 
@@ -72,14 +76,16 @@ pub struct VIP {
 pub fn locscale(o: &[f32; 3], scale: f32, vi: (Vec<Vertex>, Vec<u16>, FaceInf))
   -> (Vec<Vertex>, Vec<u16>, FaceInf) {
   (
-    vi.0.into_iter().map(|Vertex{pos: p, col: c, norm: n, tex_coord: tc}| {
+    vi.0.into_iter().enumerate().map(
+      |(j, Vertex{pos: p, col: c, norm: n, tex_coord: tc, ix: _})| {
       Vertex{
         pos: p.iter().enumerate().map(|(i, &v)| {
           if i < 3 { o[i] + v * scale } else { v } // expect else v always 1.0
         }).collect::<Vec<_>>().try_into().unwrap(),
         col: c,
         norm: n,
-        tex_coord: tc
+        tex_coord: tc,
+        ix: j as u32
       }
     }).collect(),
     vi.1,
@@ -132,21 +138,21 @@ pub fn create_vertices_cube_6_textures(
   ];
 
   let index_data: &[u16] = &[
-    0, 1, 2, 2, 3, 0, // +X right
-    4, 5, 6, 6, 7, 4, // -X left
-    8, 9, 10, 10, 11, 8, // +Y back
-    12, 13, 14, 14, 15, 12, // -Y front
-    16, 17, 18, 18, 19, 16, // +Z top
+    0, 1, 3, 2, 3, 1, // +X right
+    4, 5, 7, 6, 7, 5, // -X left
+    8, 9, 11, 10, 11, 9, // +Y back
+    12, 13, 15, 14, 15, 13, // -Y front
+    16, 17, 19, 18, 19, 17, // +Z top
 
 // extra for test
 #[cfg(interrupt_vertex)] 24,
 #[cfg(interrupt_vertex)] 25,
-#[cfg(interrupt_vertex)] 26,
+#[cfg(interrupt_vertex)] 27,
 #[cfg(interrupt_vertex)] 26,
 #[cfg(interrupt_vertex)] 27,
-#[cfg(interrupt_vertex)] 24,
+#[cfg(interrupt_vertex)] 25,
 
-    20, 21, 22, 22, 23, 20 // -Z bottom
+    20, 21, 23, 22, 23, 21 // -Z bottom
   ];
 
   let nfaces = index_data.len() as u64 / 6;
@@ -194,12 +200,12 @@ pub fn create_vertices_cube_expansion_plan(
   ];
 
   let index_data: &[u16] = &[
-    0, 1, 2, 2, 3, 0, // +X right
-    4, 5, 6, 6, 7, 4, // -X left
-    8, 9, 10, 10, 11, 8, // +Y back
-    12, 13, 14, 14, 15, 12, // -Y front
-    16, 17, 18, 18, 19, 16, // +Z top
-    20, 21, 22, 22, 23, 20 // -Z bottom
+    0, 1, 3, 2, 3, 1, // +X right
+    4, 5, 7, 6, 7, 5, // -X left
+    8, 9, 11, 10, 11, 9, // +Y back
+    12, 13, 15, 14, 15, 13, // -Y front
+    16, 17, 19, 18, 19, 17, // +Z top
+    20, 21, 23, 22, 23, 21 // -Z bottom
   ];
 
   let nfaces = index_data.len() as u64 / 6;
@@ -385,6 +391,29 @@ pub struct WG {
   pub wire: bool
 }
 
+/// draw_vip
+macro_rules! draw_vip {
+  ($self: ident, $rp: ident, // self, wgpu::RenderPass,
+   $vbuf: ident, ($vs: expr, $ve: expr), // wgpu::Buffer, (u64, u64),
+   $ibuf: ident, ($is: expr, $ie: expr), // wgpu::Buffer, (u64, u64),
+   $tid: expr, $icnt: expr) => { // usize, u32
+    $rp.push_debug_group("Prepare data for draw.");
+    $rp.set_pipeline(&$self.pipeline);
+    $rp.set_bind_group(0, &$self.bind_group[$tid].group, &[]);
+    $rp.set_index_buffer($ibuf.slice($is..$ie), wgpu::IndexFormat::Uint16);
+    $rp.set_vertex_buffer(0, $vbuf.slice($vs..$ve));
+    $rp.pop_debug_group();
+    $rp.insert_debug_marker("Draw!");
+    if !&$self.wire {
+      $rp.draw_indexed(0..$icnt, 0, 0..1);
+    }
+    if let Some(ref pipe) = &$self.pipeline_wire {
+      $rp.set_pipeline(pipe);
+      $rp.draw_indexed(0..$icnt, 0, 0..1);
+    }
+  }
+}
+
 /// World of GL
 impl WG {
   /// update matrix
@@ -423,35 +452,36 @@ impl WG {
       depth_stencil_attachment: None
     });
     for VIP{vs: vertex_buf, is: index_buf, p: fi} in &self.vips {
+/*
+      // draw faces of vip at a time by one texture
+      let isz = std::mem::size_of::<u16>() as u64; // index bytes
+      let ipv = index_buf.size() / isz; // indices per vip
+      let tid = (fi.tf)((0, self.bg, self.bind_group.len()));
+      draw_vip!(self, rpass,
+        vertex_buf, (0, vertex_buf.size()),
+        index_buf, (0, index_buf.size()),
+        tid, ipv as u32);
+*/
+/**/
       // draw separate face for bind to each texture
       for i in 0..fi.nfaces {
         let isz = std::mem::size_of::<u16>() as u64; // index bytes
 //        let ipf = (index_buf.size() / isz) / fi.nfaces; // indices per face
         let ip_s = fi.il[i as usize] * isz; // s * ipf * isz (start of face)
         let ip_e = fi.il[i as usize + 1] * isz; // e * ipf * isz (end of face)
-        let ipf = (ip_e - ip_s) / isz;
+        let ipf = (ip_e - ip_s) / isz; // indices of this face
 
         let vsz = std::mem::size_of::<Vertex>() as u64; // vertex bytes
         let vpf = (vertex_buf.size() / vsz) / fi.nfaces; // vertices per face
         let (vp_s, vp_e) = (0, fi.nfaces * vpf * vsz); // all vertices
 
         let tid = (fi.tf)((i as usize, self.bg, self.bind_group.len()));
-        rpass.push_debug_group("Prepare data for draw.");
-        rpass.set_pipeline(&self.pipeline);
-        rpass.set_bind_group(0, &self.bind_group[tid].group, &[]);
-        rpass.set_index_buffer(index_buf.slice(ip_s..ip_e),
-          wgpu::IndexFormat::Uint16);
-        rpass.set_vertex_buffer(0, vertex_buf.slice(vp_s..vp_e)); // == (..)
-        rpass.pop_debug_group();
-        rpass.insert_debug_marker("Draw!");
-        if !self.wire {
-          rpass.draw_indexed(0..ipf as u32, 0, 0..1);
-        }
-        if let Some(ref pipe) = &self.pipeline_wire {
-          rpass.set_pipeline(pipe);
-          rpass.draw_indexed(0..ipf as u32, 0, 0..1);
-        }
+        draw_vip!(self, rpass,
+          vertex_buf, (vp_s, vp_e), // == (..)
+          index_buf, (ip_s, ip_e),
+          tid, ipf as u32);
       }
+/**/
     }
     drop(rpass); // to release encoder
     queue.submit(Some(encoder.finish()));
